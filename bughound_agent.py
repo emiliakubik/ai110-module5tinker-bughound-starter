@@ -82,6 +82,11 @@ class BugHoundAgent:
             self._log("ANALYZE", "LLM output was not parseable JSON. Falling back to heuristics.")
             return self._heuristic_analyze(code_snippet)
 
+        # Validate AI output quality
+        if not self._validate_issues(issues):
+            self._log("ANALYZE", "AI output failed quality checks. Falling back to heuristics.")
+            return self._heuristic_analyze(code_snippet)
+
         return issues
 
     def propose_fix(self, code_snippet: str, issues: List[Dict[str, str]]) -> str:
@@ -225,6 +230,22 @@ class BugHoundAgent:
         if match:
             return match.group(1)
         return text
+
+    def _validate_issues(self, issues: List[Dict[str, str]]) -> bool:
+        """Validate that AI output meets quality standards."""
+        if not issues or len(issues) == 0:
+            return False
+        
+        valid_severities = {"Low", "Medium", "High"}
+        for issue in issues:
+            # Check severity is valid
+            if issue.get("severity") not in valid_severities:
+                return False
+            # Check message is not empty
+            if not issue.get("msg", "").strip():
+                return False
+        
+        return True
 
     def _can_call_llm(self) -> bool:
         return self.client is not None and hasattr(self.client, "complete")
