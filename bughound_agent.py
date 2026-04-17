@@ -123,6 +123,11 @@ class BugHoundAgent:
             self._log("ACT", "LLM returned empty output. Falling back to heuristic fixer.")
             return self._heuristic_fix(code_snippet, issues)
 
+        # Syntax validation guardrail
+        if not self._validate_python_syntax(cleaned):
+            self._log("ACT", "Fixed code has syntax errors. Rejecting fix and returning original.")
+            return code_snippet
+
         return cleaned
 
     # ----------------------------
@@ -246,6 +251,14 @@ class BugHoundAgent:
                 return False
         
         return True
+
+    def _validate_python_syntax(self, code: str) -> bool:
+        """Guardrail: Verify that code is valid Python syntax."""
+        try:
+            compile(code, "<string>", "exec")
+            return True
+        except SyntaxError:
+            return False
 
     def _can_call_llm(self) -> bool:
         return self.client is not None and hasattr(self.client, "complete")

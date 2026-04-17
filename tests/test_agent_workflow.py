@@ -47,3 +47,26 @@ def test_mock_client_forces_llm_fallback_to_heuristics_for_analysis():
     assert any(issue.get("type") == "Code Quality" for issue in result["issues"])
     # Ensure we logged the fallback path
     assert any("Falling back to heuristics" in entry.get("message", "") for entry in result["logs"])
+
+
+def test_syntax_validation_guardrail_rejects_invalid_code():
+    """Test that the syntax validation guardrail rejects AI output with syntax errors."""
+    # Custom mock client that returns invalid Python syntax
+    class BadSyntaxClient:
+        def complete(self, system_prompt: str, user_prompt: str) -> str:
+            if "Return ONLY valid JSON" in system_prompt:
+                # Return valid JSON for analysis step
+                return '[{"type": "Code Quality", "severity": "Low", "msg": "Found print"}]'
+            else:
+                # Return syntactically invalid Python for fix step
+                return "def broken(\n    print('missing closing paren'\n    return"
+    
+    agent = BugHoundAgent(client=BadSyntaxClient())
+    code = "def f():\n    print('hi')\n    return True\n"
+    result = agent.run(code)
+
+    # The guardrail should reject the invalid fix and return the original code
+    assert result["fixed_code"] == code
+    
+    # Verify the guardrail logged the rejection
+    assert any("syntax errors" in entry.get("message", "").lower() for entry in result["logs"])
